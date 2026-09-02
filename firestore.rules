@@ -1,0 +1,23 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /campaigns/{campaignId} {
+      // Anyone signed in can view campaign progress (useful for staff to see
+      // a campaign is underway), but only an Admin can create or trigger one.
+      allow read: if request.auth != null;
+      allow create, update, delete: if request.auth != null
+                                     && request.auth.token.role == 'admin';
+
+      match /recipients/{recipientId} {
+        allow read: if request.auth != null;
+        // No client ever writes here directly — only the sendCampaign Cloud
+        // Function does, using the Admin SDK, which bypasses these rules by
+        // design. Client-side write is deliberately blocked so a campaign's
+        // sent/delivered/failed history can never be tampered with from a
+        // browser, even by an Admin.
+        allow write: if false;
+      }
+    }
+  }
+}

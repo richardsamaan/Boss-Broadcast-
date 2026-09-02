@@ -13,6 +13,11 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="BOSS Broadcast">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-functions-compat.js"></script>
 <style>
   :root{
     --ink:#0A0A0A; --paper:#F4F1EA; --card:#FFFFFF; --gold:#B8862E; --gold-dark:#8F6A22;
@@ -179,6 +184,18 @@
   .mode-option-title{font-size:13.5px;font-weight:700;color:var(--ink);}
   .mode-option-desc{font-size:12px;color:var(--grey);line-height:1.5;margin-top:2px;}
   .mode-unsupported-note{font-size:11.5px;color:var(--danger);margin-top:8px;line-height:1.5;}
+
+  .api-panel{background:var(--ink);border-radius:3px;padding:20px;margin-bottom:14px;color:#fff;}
+  .api-panel-header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;}
+  .api-panel-title{font-size:14px;font-weight:700;}
+  .api-badge{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;padding:4px 10px;border-radius:12px;background:var(--grey);color:#fff;}
+  .api-badge.ready{background:var(--ok);}
+  .api-badge.notready{background:var(--danger);}
+  .api-panel-desc{font-size:12px;color:#B8B5AC;line-height:1.6;margin-bottom:16px;}
+  .api-panel .field label{color:#B8B5AC;}
+  .api-panel .field input{background:#1C1C1A;border-color:rgba(255,255,255,0.15);color:#fff;}
+  .api-status-line{font-size:12px;color:#D8D5CC;margin-top:10px;text-align:center;}
+  .manual-mode-divider{text-align:center;font-size:11.5px;color:var(--grey-light);text-transform:uppercase;letter-spacing:0.4px;margin:22px 0;}
 </style>
 </head>
 <body>
@@ -295,7 +312,71 @@
       <span class="selected-count" id="selectedCount">0 selected</span>
     </div>
 
-    <button class="btn btn-gold send-selected-btn" id="startSendingBtn" disabled>Start sending (0 selected) →</button>
+    <div class="api-panel" id="apiPanel">
+      <div class="api-panel-header">
+        <span class="api-badge" id="apiBadge">Checking setup…</span>
+        <span class="api-panel-title">Send Full Campaign Now — real one-action bulk send</span>
+      </div>
+      <p class="api-panel-desc">Uses the official WhatsApp Business Platform to deliver to every selected customer automatically, with real delivery tracking. Requires Meta Business setup to be completed first — see the setup guide.</p>
+
+      <div id="apiSignedOut">
+        <div class="field">
+          <label>Admin email</label>
+          <input type="text" id="apiEmail" placeholder="you@bossbahrain.com">
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input type="text" id="apiPassword" placeholder="Password" style="-webkit-text-security:disc;">
+        </div>
+        <button class="btn btn-outline" id="apiSignInBtn" style="width:100%;">Sign in as Admin</button>
+      </div>
+
+      <div id="apiSignedIn" style="display:none;">
+        <div class="field">
+          <label>Approved template name (image)</label>
+          <input type="text" id="apiTemplateName" placeholder="e.g. autumn_promo">
+        </div>
+        <div class="field">
+          <label>Template language code</label>
+          <input type="text" id="apiLanguageCode" placeholder="e.g. en_US" value="en_US">
+        </div>
+        <button class="btn btn-gold" id="apiSendBtn" style="width:100%;">🚀 Send Campaign to Selected Now</button>
+
+        <div id="apiProgressWrap" style="display:none;margin-top:18px;">
+          <div class="summary-stats">
+            <div class="stat"><div class="num" id="apiStatTotal">0</div><div class="lbl">Total</div></div>
+            <div class="stat ok"><div class="num" id="apiStatSent">0</div><div class="lbl">Sent</div></div>
+            <div class="stat" style="color:#2E6B44;"><div class="num" id="apiStatDelivered">0</div><div class="lbl">Delivered</div></div>
+            <div class="stat pending"><div class="num" id="apiStatFailed">0</div><div class="lbl">Failed</div></div>
+          </div>
+          <div class="send-mode-progress-bar"><div class="send-mode-progress-fill" id="apiProgressFill" style="width:0%;"></div></div>
+          <div class="api-status-line" id="apiStatusLine">Preparing…</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="manual-mode-divider">— or send manually, no setup required —</div>
+
+    <div class="mode-select" id="modeSelectWrap">
+      <div class="mode-select-title">How should each send work?</div>
+      <label class="mode-option">
+        <input type="radio" name="sendMode" value="direct" id="modeDirectRadio" checked>
+        <div>
+          <div class="mode-option-title">Open the right customer directly</div>
+          <div class="mode-option-desc">Goes straight to their chat automatically. You attach the poster yourself with one extra tap (it's already downloaded and waiting).</div>
+        </div>
+      </label>
+      <label class="mode-option" id="modeShareOption">
+        <input type="radio" name="sendMode" value="share" id="modeShareRadio">
+        <div>
+          <div class="mode-option-title">Attach the poster automatically</div>
+          <div class="mode-option-desc">The image and caption go over together in one action — but WhatsApp will ask you to pick the customer yourself each time.</div>
+        </div>
+      </label>
+      <div class="mode-unsupported-note" id="modeUnsupportedNote" style="display:none;">Automatic image attaching isn't supported by this browser/device — "Open the right customer directly" is the only option here.</div>
+    </div>
+
+    <button class="btn btn-gold send-selected-btn" id="startSendingBtn" disabled>Start sending manually (0 selected) →</button>
 
     <div id="custList"></div>
 
@@ -309,6 +390,7 @@
 
 <div class="send-mode-overlay" id="sendModeOverlay">
   <div class="send-mode-card">
+
     <div class="send-mode-progress" id="sendModeProgress">Sending 1 of 1</div>
     <div class="send-mode-progress-bar"><div class="send-mode-progress-fill" id="sendModeProgressFill" style="width:0%;"></div></div>
     <div class="send-mode-name" id="sendModeName"></div>
@@ -326,6 +408,30 @@
 <div class="toast" id="toast"></div>
 
 <script>
+/* ===================== FIREBASE (for the real Cloud API send path) =====================
+   Replace these with your own Firebase project's config. This can be a NEW Firebase
+   project, or the same one BOSS CRM already uses — either works, since this only adds
+   a 'campaigns' collection, separate from anything the CRM uses. Cloud Functions require
+   the Blaze (pay-as-you-go) plan — see the setup guide for exactly what that costs. */
+const FIREBASE_CONFIG = {
+  apiKey: "YOUR_FIREBASE_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  projectId: "YOUR_PROJECT",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+const FIREBASE_CONFIGURED = FIREBASE_CONFIG.apiKey !== 'YOUR_FIREBASE_API_KEY';
+
+let fbAuth = null, fbDb = null, fbStorage = null, fbFunctions = null;
+if(FIREBASE_CONFIGURED && window.firebase){
+  firebase.initializeApp(FIREBASE_CONFIG);
+  fbAuth = firebase.auth();
+  fbDb = firebase.firestore();
+  fbStorage = firebase.storage();
+  fbFunctions = firebase.functions();
+}
+
 /* ===================== STATE ===================== */
 let campaign = {
   customers: [],       // [{name, phone, status: 'pending'|'sent'|'skip'}]
@@ -731,6 +837,117 @@ function sendToCustomer(idx){
     renderCustomerList();
   });
 }
+
+/* ---------------------------------------------------------------
+   Real Cloud API send path — genuine one-action bulk sending with
+   live delivery tracking. Only appears functional once:
+     1. Firebase config above is filled in and deployed
+     2. Cloud Functions (from the separate functions/ folder) are deployed
+     3. Meta Business setup + an approved template exist
+   Until then, this panel clearly says so instead of pretending to work.
+--------------------------------------------------------------- */
+function updateApiBadge(){
+  const badge = document.getElementById('apiBadge');
+  if(!FIREBASE_CONFIGURED){
+    badge.textContent = 'Not set up yet';
+    badge.className = 'api-badge notready';
+    return;
+  }
+  badge.textContent = fbAuth && fbAuth.currentUser ? 'Ready' : 'Sign in required';
+  badge.className = 'api-badge ' + (fbAuth && fbAuth.currentUser ? 'ready' : 'notready');
+}
+
+if(FIREBASE_CONFIGURED && fbAuth){
+  fbAuth.onAuthStateChanged(user=>{
+    document.getElementById('apiSignedOut').style.display = user ? 'none' : 'block';
+    document.getElementById('apiSignedIn').style.display = user ? 'block' : 'none';
+    updateApiBadge();
+  });
+} else {
+  document.getElementById('apiSignedOut').innerHTML =
+    '<p style="font-size:12px;color:#B8B5AC;line-height:1.6;">Firebase isn\'t configured in this file yet — this is expected until Meta Business setup and the backend are deployed. Follow the setup guide, then this panel activates automatically.</p>';
+}
+updateApiBadge();
+
+document.getElementById('apiSignInBtn').addEventListener('click', async ()=>{
+  if(!fbAuth){ showToast('Firebase is not configured yet.'); return; }
+  const email = document.getElementById('apiEmail').value.trim();
+  const password = document.getElementById('apiPassword').value;
+  try{
+    await fbAuth.signInWithEmailAndPassword(email, password);
+    showToast('Signed in.');
+  }catch(e){
+    showToast('Sign-in failed: ' + e.message);
+  }
+});
+
+document.getElementById('apiSendBtn').addEventListener('click', async ()=>{
+  if(!fbDb || !fbStorage || !fbFunctions){ showToast('Firebase is not configured yet.'); return; }
+  const templateName = document.getElementById('apiTemplateName').value.trim();
+  const languageCode = document.getElementById('apiLanguageCode').value.trim() || 'en_US';
+  if(!templateName){ showToast('Enter the approved template name first.'); return; }
+
+  const selected = campaign.customers.filter(c => c.status === 'pending' && c.selected);
+  if(selected.length === 0){ showToast('Select at least one customer first.'); return; }
+  if(!confirm(`Send this campaign to ${selected.length} customers now? This cannot be undone once started.`)) return;
+
+  const sendBtn = document.getElementById('apiSendBtn');
+  sendBtn.disabled = true; sendBtn.textContent = 'Uploading poster…';
+
+  try{
+    // Upload the poster to Firebase Storage so Meta's servers can fetch it by URL.
+    const posterFile = await getPosterFile();
+    const storageRef = fbStorage.ref('campaign-posters/' + Date.now() + '_' + (campaign.posterFileName || 'poster.jpg'));
+    await storageRef.put(posterFile);
+    const posterUrl = await storageRef.getDownloadURL();
+
+    sendBtn.textContent = 'Creating campaign…';
+    const campaignDoc = await fbDb.collection('campaigns').add({
+      templateName, languageCode,
+      headerType: 'image',
+      posterUrl,
+      bodyParams: ['{{name}}'], // resolved per-recipient by the Cloud Function
+      recipients: selected.map(c => ({ id: c.phone, name: c.name, phone: c.phone })),
+      status: 'pending',
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      createdBy: fbAuth.currentUser.email
+    });
+
+    document.getElementById('apiProgressWrap').style.display = 'block';
+    document.getElementById('apiStatTotal').textContent = selected.length;
+    document.getElementById('apiStatusLine').textContent = 'Sending…';
+
+    // Live progress — updates in real time as the Cloud Function works through
+    // the list, and again later as Meta's webhook reports delivered/read/failed.
+    campaignDoc.onSnapshot(snap=>{
+      const d = snap.data();
+      if(!d) return;
+      document.getElementById('apiStatSent').textContent = d.sentCount || 0;
+      document.getElementById('apiStatFailed').textContent = d.failedCount || 0;
+      const pct = d.sentCount || d.failedCount ? Math.round(((d.sentCount||0)+(d.failedCount||0)) / selected.length * 100) : 0;
+      document.getElementById('apiProgressFill').style.width = pct + '%';
+      document.getElementById('apiStatusLine').textContent =
+        d.status === 'completed' ? `Done — ${d.sentCount} sent, ${d.failedCount} failed.` : 'Sending…';
+    });
+    campaignDoc.collection('recipients').onSnapshot(snap=>{
+      const delivered = snap.docs.filter(d => ['delivered','read'].includes(d.data().status)).length;
+      document.getElementById('apiStatDelivered').textContent = delivered;
+    });
+
+    sendBtn.textContent = 'Calling WhatsApp API…';
+    const sendCampaignFn = fbFunctions.httpsCallable('sendCampaign');
+    const result = await sendCampaignFn({ campaignId: campaignDoc.id });
+
+    selected.forEach(c => { c.status = 'sent'; });
+    saveCampaign();
+    renderCustomerList();
+    showToast(`Campaign sent — ${result.data.sentCount} delivered, ${result.data.failedCount} failed.`);
+  }catch(e){
+    showToast('Campaign send failed: ' + e.message);
+  }finally{
+    sendBtn.disabled = false; sendBtn.textContent = '🚀 Send Campaign to Selected Now';
+  }
+});
 
 document.getElementById('custSearch').addEventListener('input', renderCustomerList);
 document.getElementById('backToStep2').addEventListener('click', ()=> goToStep(2));

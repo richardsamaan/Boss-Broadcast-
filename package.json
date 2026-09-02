@@ -1,0 +1,12 @@
+{
+  "name": "boss-broadcast-functions",
+  "description": "Cloud Functions backend for BOSS Broadcast — sends campaigns via the official WhatsApp Cloud API and tracks delivery status.",
+  "engines": { "node": "20" },
+  "main": "index.js",
+  "dependencies": {
+    "firebase-admin": "^12.1.0",
+    "firebase-functions": "^5.0.0",
+    "node-fetch": "^2.7.0"
+  },
+  "private": true
+}
